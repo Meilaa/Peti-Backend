@@ -59,22 +59,19 @@ const sendDataToBackend = async (messages, retries = 3) => {
             const response = await axios.post(BACKEND_API_URL, { messages }, {
                 timeout: 10000 // Add timeout
             });
-            console.log(`✅ Successfully sent ${messages.length} messages to backend.`);
-            return true;
+            console.log(`✅ Successfully sent ${messages.length} messages to backend`);
+            return response.data;
         } catch (error) {
             attempt++;
-            console.error(`❌ Backend error (attempt ${attempt}/${retries}):`, error.response?.data || error.message);
-            
-            if (attempt < retries) {
-                // Exponential backoff
-                const delay = 1000 * Math.pow(2, attempt);
-                console.log(`Retrying in ${delay/1000} seconds...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
+            console.error(`❌ Attempt ${attempt} failed to send data to backend:`, error.message);
+            if (attempt === retries) {
+                console.error("❌ All retry attempts failed");
+                throw error;
             }
+            // Wait before retrying (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
         }
     }
-    
-    return false;
 };
 
 // Main function to fetch & send data every 30 seconds
