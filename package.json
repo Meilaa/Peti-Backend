@@ -13,11 +13,12 @@
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.10.0",
-    "random": "^5.3.0"
+    "random": "^5.3.0",
+    "stripe": "^18.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"
