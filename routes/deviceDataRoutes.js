@@ -404,60 +404,73 @@ function calculateDuration(coordinates) {
 } 
 
 // Modify the GET /walks/:deviceId route to include distance and duration
+// Modified GET /walks/:deviceId route to properly handle date filtering
 router.get('/walks/:deviceId', authenticateJWT, async (req, res) => {
-    try {
-      const { deviceId } = req.params;
-      const userId = req.user._id;
-  
-      const device = await Device.findOne({ _id: deviceId, user: userId }).exec();
-      if (!device) {
-        return res.status(404).json({ error: "Device not found or not owned by user" });
-      }
-  
-      // Get completed walks
-      const walks = await WalkPath.find({ device: deviceId, isActive: false })
-        .sort({ endTime: -1 })
-        .limit(10)
-        .exec();
-  
-      // Get currently active walk (if any)
-      const activeWalk = await WalkPath.findOne({ device: deviceId, isActive: true }).exec();
-  
-      // Enrich finished walks with stats
-      const walksWithStats = walks
-        .filter(walk => walk && walk.coordinates)
-        .map((walk) => {
-          const distance = calculateTotalDistance(walk.coordinates);
-          const duration = calculateDuration(walk.coordinates);
-          return {
-            ...walk.toObject(),
-            distance,
-            duration,
-          };
-        });
-  
-      // ✅ Declare before using it
-      let activeWalkWithStats = null;
-  
-      if (activeWalk && activeWalk.coordinates?.length > 0) {
-        const distance = calculateTotalDistance(activeWalk.coordinates);
-        const duration = calculateDuration(activeWalk.coordinates); // Already fixed to ignore gaps
-        activeWalkWithStats = {
-          ...activeWalk.toObject(),
-          distance,
-          duration,
-        };
-      }
-  
-      return res.status(200).json({
-        recentWalks: walksWithStats,
-        activeWalk: activeWalkWithStats,
-      });
-    } catch (error) {
-      console.error('Error fetching walk data:', error);
-      res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  try {
+    const { deviceId } = req.params;
+    const { date } = req.query; // Optional date parameter
+    const userId = req.user._id;
+
+    const device = await Device.findOne({ _id: deviceId, user: userId }).exec();
+    if (!device) {
+      return res.status(404).json({ error: "Device not found or not owned by user" });
     }
-  });
+
+    // Create query for walks
+    let walksQuery = { device: deviceId };
+    let activeWalkQuery = { device: deviceId, isActive: true };
+    
+    // Apply date filter if provided
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      walksQuery.startTime = { $gte: startOfDay, $lte: endOfDay };
+      activeWalkQuery.startTime = { $gte: startOfDay, $lte: endOfDay };
+    }
+
+    // Get completed walks, always sort by most recent first
+    const walks = await WalkPath.find({ ...walksQuery, isActive: false })
+      .sort({ startTime: -1 })
+      .limit(date ? 100 : 10) // Fetch more if filtering by date
+      .exec();
+
+    // Get currently active walk (if any)
+    const activeWalk = await WalkPath.findOne(activeWalkQuery).exec();
+
+    // Enrich finished walks with stats
+    const walksWithStats = walks
+      .filter(walk => walk && walk.coordinates && walk.coordinates.length > 0)
+      .map((walk) => {
+        const distance = calculateTotalDistance(walk.coordinates);
+        return {
+          ...walk.toObject(),
+          distance,
+        };
+      });
+
+    let activeWalkWithStats = null;
+
+    if (activeWalk && activeWalk.coordinates?.length > 0) {
+      const distance = calculateTotalDistance(activeWalk.coordinates);
+      activeWalkWithStats = {
+        ...activeWalk.toObject(),
+        distance,
+      };
+    }
+
+    return res.status(200).json({
+      recentWalks: walksWithStats,
+      activeWalk: activeWalkWithStats,
+    });
+  } catch (error) {
+    console.error('Error fetching walk data:', error);
+    res.status(500).json({ error: 'Internal Server Error', details: error.message });
+  }
+});
   
   
 // Helper function to check geofence and danger zones for an animal
