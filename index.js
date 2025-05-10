@@ -19,11 +19,22 @@ const stripeRoutes = require('./routes/stripeRoutes');
 // Init Express App
 const app = express();
 
-// Middleware
+// Middleware: CORS and body parsing
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
-app.use(express.json());
+
+// Special handling for Stripe webhooks
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
+
+// Keep webhook request body raw for signature verification
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/webhooks/stripe') {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
 
 // Root Route
 app.get('/', (req, res) => {
@@ -82,7 +93,7 @@ app.use('/api/territories', territoryRoutes);
 app.use('/api/danger-zones', dangerZoneRoutes);
 app.use('/api/calendar-events', calendarEventRoutes);
 app.use('/api/pet-services', petServicesRoutes);
-app.use('/api/stripe', stripeRoutes);
+app.use('/api', stripeRoutes); // Updated to match the webhook path
 
 // Start server
 const PORT = process.env.PORT || 3001;
